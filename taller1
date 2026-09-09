@@ -1,0 +1,110 @@
+# =========================================================
+# TALLER DE LABORATORIO: MOTOR DE FRAUDE BANCARIO (40 MIN)
+# Motor de inferencia por encadenamiento hacia adelante
+# (forward chaining) aplicado a deteccion de fraude.
+# =========================================================
+
+import operator
+
+# ---------------------------------------------------------
+# 0. Operadores soportados por las reglas
+# ---------------------------------------------------------
+# El motor del ejemplo original solo comparaba con "==".
+# Para poder escribir reglas como [monto > 5000] necesitamos
+# mas operadores. Cada condicion ahora es una tupla:
+#   (variable, operador, valor)
+OPERADORES = {
+    "==": operator.eq,
+    "!=": operator.ne,
+    ">":  operator.gt,
+    "<":  operator.lt,
+    ">=": operator.ge,
+    "<=": operator.le,
+}
+
+# ---------------------------------------------------------
+# 1. Base de Conocimientos Estructurada
+# ---------------------------------------------------------
+# Hechos iniciales de una transaccion que esta siendo evaluada.
+hechos = {
+    "monto": 6000,
+    "pais_extranjero": True,
+    "ip_sospechosa": False,
+    "intentos_fallidos": 4,
+}
+
+# Cada regla tiene:
+#   id          -> nombre de la regla
+#   condiciones -> lista de tuplas (variable, operador, valor)
+#                  TODAS deben cumplirse (compuerta AND via all())
+#   conclusion  -> hechos nuevos que se agregan si la regla dispara
+reglas = [
+    {
+        "id": "R1",
+        "condiciones": [("monto", ">", 5000)],
+        "conclusion": {"transaccion_inusual": True},
+    },
+    {
+        "id": "R2",
+        "condiciones": [
+            ("transaccion_inusual", "==", True),
+            ("pais_extranjero", "==", True),
+        ],
+        "conclusion": {"bloquear_tarjeta": True},
+    },
+    {
+        "id": "R3",
+        "condiciones": [("intentos_fallidos", ">=", 3)],
+        "conclusion": {"actividad_sospechosa": True},
+    },
+    {
+        "id": "R4",
+        "condiciones": [
+            ("actividad_sospechosa", "==", True),
+            ("ip_sospechosa", "==", True),
+        ],
+        "conclusion": {"bloquear_tarjeta": True},
+    },
+    {
+        "id": "R5",
+        "condiciones": [("bloquear_tarjeta", "==", True)],
+        "conclusion": {"notificar_seguridad": True},
+    },
+]
+
+
+def evaluar_condicion(hechos, condicion):
+    """Evalua una condicion (variable, operador, valor) contra los hechos."""
+    variable, op, valor = condicion
+    if variable not in hechos:
+        return False
+    return OPERADORES[op](hechos[variable], valor)
+
+
+# ---------------------------------------------------------
+# 2. Motor de Inferencia Forward Chaining
+# ---------------------------------------------------------
+nuevos_hechos = True
+while nuevos_hechos:
+    nuevos_hechos = False
+    for regla in reglas:
+        # all() actua como compuerta logica AND: solo es True si
+        # CADA condicion de la regla se cumple sobre los hechos actuales.
+        condiciones_cumplidas = all(
+            evaluar_condicion(hechos, condicion)
+            for condicion in regla["condiciones"]
+        )
+
+        if condiciones_cumplidas:
+            for clave, valor in regla["conclusion"].items():
+                if clave not in hechos:  # Si es un HECHO NUEVO
+                    hechos[clave] = valor
+                    nuevos_hechos = True  # Dispara un nuevo ciclo
+                    print(f"Disparando {regla['id']} -> Nuevo hecho: {clave}={valor}")
+
+print("\nMemoria final:", hechos)
+
+if hechos.get("bloquear_tarjeta"):
+    print("\nRESULTADO: Tarjeta BLOQUEADA por encadenamiento de reglas.")
+else:
+    print("\nRESULTADO: Transaccion sin bloqueo.")
